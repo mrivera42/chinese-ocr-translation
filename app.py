@@ -22,7 +22,7 @@ yolov5 = torch.hub.load('ultralytics/yolov5', 'custom', path='models/yolov5_best
 
 
 # load image for inference 
-im = cv2.imread('processed_data/3.jpeg')
+im = cv2.imread('processed_data/28.jpeg')
 im = cv2.resize(im, (416,416))
 
 # inference 
