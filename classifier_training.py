@@ -5,34 +5,70 @@ import matplotlib.pyplot as plt
 import time
 
 
-class Model(torch.nn.Module): 
+class CustomModel(torch.nn.Module): 
 
     def __init__(self): 
-        super(Model, self).__init__()
+        super(CustomModel, self).__init__()
         self.features = torch.nn.Sequential(
             torch.nn.Conv2d(1,32,kernel_size=(5,5),stride=1),
+            torch.nn.BatchNorm2d(32),
             torch.nn.ReLU(),
             torch.nn.AvgPool2d(kernel_size=(2,2),stride=2),
             torch.nn.Conv2d(32,64,kernel_size=(5,5),stride=1),
+            torch.nn.BatchNorm2d(64),
             torch.nn.ReLU(),
             torch.nn.AvgPool2d(kernel_size=(2,2),stride=2),
             torch.nn.Conv2d(64,128, kernel_size=(5,5),stride=1),
-            torch.nn.ReLU(),
+            torch.nn.BatchNorm2d(128),
+            torch.nn.ReLU(), 
             torch.nn.AvgPool2d(kernel_size=(2,2),stride=2),
             torch.nn.Flatten()
-
         )
         self.classifier = torch.nn.Sequential(
-            torch.nn.Linear(4*4*128,1024),
+            torch.nn.Linear(4*4*128,512),
             torch.nn.ReLU(),
-            torch.nn.Linear(1024,7330)
+            torch.nn.Linear(512,103)
         )
+        
     
     def forward(self, inputs): 
         x = self.features(inputs)
         x = self.classifier(x)
 
         return x 
+
+class LeNet5(torch.nn.Module):
+
+    def __init__(self):
+        super(LeNet5, self).__init__()
+        
+        self.convolutional_layer = torch.nn.Sequential(            
+            torch.nn.Conv2d(in_channels=1, out_channels=6, kernel_size=5, stride=1),
+            torch.nn.BatchNorm2d(6),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0),
+            torch.nn.Conv2d(in_channels=6, out_channels=16, kernel_size=5, stride=1),
+            torch.nn.BatchNorm2d(16),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=0),
+            torch.nn.Conv2d(in_channels=16, out_channels=128, kernel_size=5, stride=1),
+            torch.nn.BatchNorm2d(128),
+            torch.nn.ReLU(),
+            torch.nn.Flatten()
+        )
+
+        self.linear_layer = torch.nn.Sequential(
+            torch.nn.Linear(in_features=120, out_features=120),
+            torch.nn.ReLU(),
+            torch.nn.Linear(in_features=120, out_features=103),
+        )
+
+    def forward(self, x):
+        x = self.convolutional_layer(x)
+        x = self.linear_layer(x)
+        x = torch.nn.functional.softmax(x, dim=1)
+        return x
+
 
 if __name__ == "__main__": 
 
@@ -57,8 +93,8 @@ if __name__ == "__main__":
 
     # load dataset 
     path = '/Users/maxrivera/Desktop/chinese-character-dataset'
-    trainpath = path + '/CASIA-HWDB_Train/Train'
-    testpath = path + '/CASIA-HWDB_Test/Test'
+    trainpath = path + '/top100/Train'
+    testpath = path + '/top100/Test'
     ds_train = torchvision.datasets.ImageFolder(
         root=trainpath,
         transform=transforms
@@ -70,6 +106,7 @@ if __name__ == "__main__":
 
     classes = ds_test.classes 
     np.save("class_names",np.array(classes))
+    print('num_classes: ',len(np.array(classes)))
     # print(f'ds len: {len(ds)}')
     # print(f'num classes: {len(ds.classes)}')
 
@@ -94,7 +131,8 @@ if __name__ == "__main__":
     dl_test = torch.utils.data.DataLoader(ds_test, batch_size=64,shuffle=True,num_workers=4,pin_memory=True)
 
     # LENET5
-    model = Model()
+    # model = CustomModel()
+    model = CustomModel()
     model.to(mps_device)
     print(model)
 
@@ -113,6 +151,7 @@ if __name__ == "__main__":
     epochs = 30
     loss_fn = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(params=model.parameters(),lr=lr)
+    # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
 
     metrics = {
         'training_acc': [],
@@ -204,6 +243,9 @@ if __name__ == "__main__":
             best_epoch = epoch 
             model_scripted = torch.jit.script(model) # Export to TorchScript
             model_scripted.save('models/model_scripted.pt')
+
+        # update the learning rate scheduler 
+        # scheduler.step()
     print(f'Best model acc: {best_acc} epoch: {best_epoch}')
 
     # time duration 

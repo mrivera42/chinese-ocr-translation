@@ -22,7 +22,7 @@ if __name__ == "__main__":
     # load dataset 
     path = '/Users/maxrivera/Desktop/chinese-character-dataset'
     trainpath = path + '/CASIA-HWDB_Train/Train'
-    testpath = path + '/CASIA-HWDB_Test/Test'
+    testpath = path + '/top100/Test'
 
     ds_test = torchvision.datasets.ImageFolder(
         root=testpath,
@@ -51,6 +51,11 @@ if __name__ == "__main__":
 
             # forward
             pred = model(x)
+            prob = torch.nn.functional.softmax(pred)
+            value, index = torch.max(prob,1)
+            ind = index[0].item() 
+            print(ind)
+            print(y)
 
             # loss 
             loss = loss_fn(pred, y)
