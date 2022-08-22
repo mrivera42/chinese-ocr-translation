@@ -9,16 +9,17 @@ class Embedding(torch.nn.Module):
 	def __init__(self, d_vocab, d_embedding):
 
 		super(Embedding, self).__init__()
-		print('d_vocab: ',d_vocab)
-		print('d_embedding: ',d_embedding)
+		# print('d_vocab: ',d_vocab)
+		# print('d_embedding: ',d_embedding)
 		self.embedding = torch.nn.Embedding(d_vocab, d_embedding)
 
 	def forward(self,x):
 
-		print('embedding in: ',x.size())
+		# print('embedding in: ',x.size())
+		# print('max value in embedding: ', torch.max(x))
 
 		x = self.embedding(x)
-		print('embedding out: ',x.size())
+		# print('embedding out: ',x.size())
 		return x 
 
 
@@ -44,7 +45,7 @@ class PositionalEmbedding(torch.nn.Module):
 		self.register_buffer('pe',pe)
 
 	def forward(self, x):
-		print('pe in: ',x.size())
+		# print('pe in: ',x.size())
 
 
 
@@ -56,7 +57,7 @@ class PositionalEmbedding(torch.nn.Module):
 		# add positional encoding 
 		x += self.pe[:,:self.d_seq]
 
-		print('pe out: ',x.size())
+		# print('pe out: ',x.size())
 		return x 
 
 
@@ -149,12 +150,14 @@ class Encoder(torch.nn.Module):
 	def __init__(self, d_vocab, d_seq, d_embedding, h, expansion_factor, num_layers):
 
 		super(Encoder, self).__init__()
+		# print('-- Inside Encoder Init --')
 		self.embedding = Embedding(d_vocab, d_embedding)
 		self.positionalembedding = PositionalEmbedding(d_seq, d_embedding)
 		self.layers = torch.nn.ModuleList([TransformerBlock(d_seq, d_embedding, h, expansion_factor) for i in range(num_layers)])
 
 
 	def forward(self, x):
+		# print('-- Inside Encoder Forward --')
 
 		x = self.embedding(x)
 		x = self.positionalembedding(x)
@@ -189,6 +192,7 @@ class Decoder(torch.nn.Module):
 	def __init__(self, d_vocab, d_seq, d_embedding, h, expansion_factor, num_layers):
 
 		super(Decoder, self).__init__()
+		# print('-- Inside Decoder Init --')
 
 		self.embedding = Embedding(d_vocab, d_embedding)
 		self.positionalembedding = PositionalEmbedding(d_seq, d_embedding)
@@ -196,6 +200,8 @@ class Decoder(torch.nn.Module):
 		self.fc_out = torch.nn.Linear(d_embedding,d_vocab)
 
 	def forward(self, enc_out, x, mask):
+
+		# print('-- Inside Decoder Forward --')
 
 		x = self.embedding(x)
 		x = self.positionalembedding(x)
