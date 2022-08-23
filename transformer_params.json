@@ -1,0 +1,1 @@
+{"d_src_vocab": 3194, "d_trg_vocab": 5493, "d_seq": 60, "d_embedding": 128, "h": 8, "expansion_factor": 4, "num_layers": 3}

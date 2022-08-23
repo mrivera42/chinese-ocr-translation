@@ -5,6 +5,8 @@ import cv2
 import numpy as np
 import sys
 import torchvision
+import transformer 
+import json
 
 # set device 
 if not torch.backends.mps.is_available():
@@ -58,7 +60,7 @@ transforms = torchvision.transforms.Compose([
 convnet = torch.jit.load('models/model_scripted.pt',map_location='cpu')
 convnet.eval() # set dropout layers to eval mode for inference 
 classes = np.load('class_names.npy')
-transcription = ''
+transcription = []
 for character in  characters:
 
     im = cv2.cvtColor(character,cv2.COLOR_BGR2GRAY)
@@ -69,9 +71,42 @@ for character in  characters:
     logits = convnet(im)
     index = np.argmax(logits.detach().numpy())
     pred = classes[index]
-    transcription += pred
+    transcription.append(pred)
     
+# machine translation 
+with open('transformer_params.json') as fh: 
+    params = json.load(fh)
+transformer = transformer.Transformer(
+    d_src_vocab=params['d_src_vocab'],
+    d_trg_vocab=params['d_trg_vocab'],
+    d_seq=params['d_seq'],
+    d_embedding=params['d_embedding'],
+    h=params['h'],
+    expansion_factor=params['expansion_factor'],
+    num_layers=params['num_layers']
+    
+)
+transformer.load_state_dict(torch.load('models/transformer.pt'))
+transformer.to(torch.device("cpu"))
+transformer.eval()
+
+transcription.insert(0,'BOS')
+transcription.append('EOS')
+transcription = [transcription]
+transcription = np.array([np.concatenate([x,['PAD']*(params['d_seq']-len(x))]) if len(x) < params['d_seq'] else x for x in transcription])
+with open('en_index_dict.json') as fh: 
+    en_index_dict = json.load(fh)
+with open('cn_word_dict.json') as fh: 
+    cn_word_dict = json.load(fh)
+transcription = [[cn_word_dict[word] for word in sentence] for sentence in transcription]
 print(transcription)
+
+memory = transformer.encoder(transcription)
+
+
+
+
+
 
     
 
