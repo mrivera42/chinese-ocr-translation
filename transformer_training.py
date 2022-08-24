@@ -2,6 +2,7 @@ from tkinter.tix import MAX
 import numpy as np
 import torch 
 from nltk import word_tokenize
+import nltk
 from collections import Counter 
 import matplotlib.pyplot as plt 
 import transformer
@@ -12,7 +13,7 @@ import json
 UNK = 0 # unknown word id 
 PAD = 1 # padding word id 
 BATCH_SIZE = 64 
-EPOCHS=20
+EPOCHS=100
 LAYERS=3
 H_NUM=8
 D_MODEL=128
@@ -22,8 +23,6 @@ MAX_LENGTH=60
 TRAIN_FILE='/Users/maxrivera/Desktop/chinese-english-dataset/train.txt'
 DEV_FILE='/Users/maxrivera/Desktop/chinese-english-dataset/dev.txt'
 SAVE_FILE='models/transformer_model.pt'
-# set device 
-DEVICE=torch.device("mps")
 DEVICE=torch.device("cpu")
 
 
@@ -61,15 +60,10 @@ def build_dictionary(sentences, max_words=50000):
     ls = word_count.most_common(max_words)
     ls.insert(0,('UNK',1))
     ls.insert(0,('PAD',0))
-    # print('ls: ',ls)
     total_words = len(ls) 
     word_dict = {w[0]: index  for index,w in enumerate(ls)}
-    # print('word_dict: ',word_dict)
-
-
     # inverted index 
     index_dict = {v:k for k,  v in word_dict.items()}
-    # print('index_dict: ',index_dict)
     return word_dict, total_words, index_dict
 
 def wordToID(en, cn, en_dict, cn_dict):
@@ -125,12 +119,49 @@ def splitBatch(en, cn, batch_size, shuffle=True):
     
     return batches 
 
+
+def get_bleu_score(reference, hypothesis):
+    '''
+    Args:
+    - reference: target sentences (batch_size x seq_len)
+    - hypothesis: predicted sentences (batch_size x seq_len)
+    Return: 
+    - bleu_score: corpos bleu score between reference and hypothesis (scalar)
+    '''
+
+    # remove special tokens 
+    new_reference = []
+    for sentence in reference:
+        new_sentence=[]
+        for word in sentence:
+            if word == 'EOS':
+                break
+            if word != 'BOS' and word != 'EOS' and word != 'PAD':
+                new_sentence.append(word)
+        new_reference.append(new_sentence)
+
+    new_hypothesis = []
+    for sentence in hypothesis:
+        new_sentence = []
+        for word in sentence:
+            if word == 'EOS':
+                break
+            if word != 'BOS' and word != 'EOS' and word != 'PAD':
+                new_sentence.append(word)
+        new_hypothesis.append(new_sentence)
+    
+    print('reference: ', new_reference)
+    print('hypothesis: ', new_hypothesis)
+    
+    # calculate BLEU score 
+    bleu_score = nltk.translate.bleu_score.corpus_bleu(reference, hypothesis)
+
+    return bleu_score
+
+
 # load and tokenize data
-# print('TOKENIZE DATA')
 train_en, train_cn = load_data(TRAIN_FILE)
 dev_en, dev_cn = load_data(DEV_FILE)
-# print('dev_en: ', dev_en)
-# print('dev_cn: ',dev_cn)
 
 
 # build dictionaries 
@@ -144,14 +175,10 @@ with open("cn_word_dict.json", "w") as fp:
 with open("en_index_dict.json", "w") as fp:
     json.dump(en_index_dict , fp) 
 
-# print('en total words: ',en_total_words)
-# print('cn total words: ', cn_total_words)
 # use dictionaries to convert each word to an index id 
 train_en, train_cn = wordToID(train_en, train_cn, en_word_dict, cn_word_dict)
 dev_en, dev_cn     = wordToID(dev_en, dev_cn, en_word_dict, cn_word_dict)
 
-# print('max value in train_cn: ', np.max([np.max(sent) for sent in train_cn]))
-# print('max value in dev_cn: ', np.max([np.max(sent) for sent in dev_cn]))
 # split into batches 
 train_data = splitBatch(en=train_en, cn=train_cn, batch_size=BATCH_SIZE)
 dev_data = splitBatch(en=dev_en, cn=dev_cn, batch_size=BATCH_SIZE)
@@ -159,8 +186,6 @@ dev_data = splitBatch(en=dev_en, cn=dev_cn, batch_size=BATCH_SIZE)
 # vocab lengths 
 src_vocab = len(cn_word_dict)
 tgt_vocab = len(en_word_dict)
-# print(f'src_vocab: {src_vocab}')
-# print(f'tgt_vocab: {tgt_vocab}')
 
 # init model 
 # print('d_src_vocab: ',src_vocab)
@@ -194,15 +219,17 @@ model = transformer.Transformer(
 model.to(DEVICE)
 
 # init mask 
-mask = torch.tril(torch.ones((MAX_LENGTH, MAX_LENGTH))).to(DEVICE)
+
 
 # optimization loop 
 best_loss = 1e5
 best_epoch = 0
-optimizer=torch.optim.Adam(params=model.parameters(),lr=1e-3)
+best_bleu = 0
+optimizer=torch.optim.Adam(params=model.parameters(),lr=5e-5)
 loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0) 
 train_losses = []
 val_losses = []
+bleu_scores = []
 for epoch in range(1,EPOCHS+1):
 
     # train loop 
@@ -211,15 +238,17 @@ for epoch in range(1,EPOCHS+1):
         # place tensors to device 
         src = torch.Tensor(src).to(DEVICE).long()
         trg = torch.Tensor(trg).to(DEVICE).long()
+        mask = torch.tril(torch.ones((MAX_LENGTH, MAX_LENGTH))).to(DEVICE)
 
         # forward pass 
         out = model(src,trg, mask)
-        # print('out: ', out.size())
-        # print('trg: ', trg.size())
-        # print(trg)
-        # print('out reshaped: ', out.view(-1, tgt_vocab).size())
-        # print('trg reshaped: ', trg.view(-1).size())
 
+        # print prediction vs target sentence 
+        trg_sentence = id_to_word(trg,en_index_dict)
+
+        val, ind = torch.max(out, -1)
+        pred_sentence = id_to_word(ind,en_index_dict)
+        
 
         # compute loss 
         train_loss = loss_fn(out.view(-1, tgt_vocab), trg.view(-1))
@@ -231,16 +260,10 @@ for epoch in range(1,EPOCHS+1):
         # update weights 
         optimizer.step()
 
-        # convert to words 
-        trg_words = id_to_word(trg,en_index_dict)
-        # print('label: ',trg_words)
-        val, ind = torch.max(out,dim=-1)
-        # print('ind: ',ind)
-        out_words = id_to_word(ind,en_index_dict)
-        # print('predict: ',out_words)
     
     val_loss = 0
     num_batches = len(dev_data)
+    bleu = 0
 
     for i, (src, trg) in enumerate(dev_data):
 
@@ -250,45 +273,56 @@ for epoch in range(1,EPOCHS+1):
 
         # forward pass 
         out = model(src, trg, mask)
-
-        # print('out: ', out.size())
-        # print('trg: ',trg.size())
-        # print('out reshape: ', out.view(-1, tgt_vocab).size())
-        # print('trg reshape: ', trg.view(-1).size())
         
         # compute loss 
         loss_val = loss_fn(out.view(-1,tgt_vocab),trg.view(-1))
         val_loss += loss_val.item()
+
+        # compute bleu score 
+        trg_sentences = id_to_word(trg,en_index_dict)
+        val, ind = torch.max(out, -1)
+        pred_sentences = id_to_word(ind,en_index_dict)
+        bleu_score = get_bleu_score(trg_sentences, pred_sentences)
+        print('bleu score: ', bleu_score)
+        bleu += bleu_score
+
         
     val_loss /= num_batches
+    bleu /= num_batches
     val_losses.append(val_loss)
     train_losses.append(train_loss.item())
+    bleu_scores.append(bleu)
+    
     
 
-    if val_loss < best_loss:
+    if bleu > best_bleu:
+        best_bleu = bleu
         best_loss = val_loss
-        best_epoch = epoch
+        best_epoch = epoch 
         torch.save(model.state_dict(), 'models/transformer.pt')
 
-    print(f'Epoch[{epoch}/{EPOCHS}] train_loss: {train_loss.item()} val_loss: {val_loss}')
-print(f'best model - epoch: {best_epoch} val loss: {best_loss}')
+    print(f'Epoch[{epoch}/{EPOCHS}] train_loss: {train_loss.item()} val_loss: {val_loss} bleu: {bleu}')
+print(f'best model - epoch: {best_epoch} val loss: {best_loss} bleu: {best_bleu}')
 
 def word_to_id(batch, word_dict):
 
     out_ids = [[word_dict[word] for word in sent] for sent in batch]
     return out_ids
 
-# input = [['She','married','him','.']]
-# input_ids = word_to_id(input, cn_word_dict)
-
-
 plt.plot(train_losses, label='train')
 plt.plot(val_losses,label='val')
 plt.title('Transformer Loss')
-plt.xlabel('epoch')
+plt.xlabel('Epoch')
 plt.ylabel('CE Loss')
 plt.legend()
 plt.savefig('results/transformer_loss.png')
+plt.close()
+
+plt.plot(bleu_scores)
+plt.title('Transformer Bleu Score')
+plt.xlabel('Epoch')
+plt.ylabel('Bleu Score')
+plt.savefig('results/transformer_bleu.png')
 
 
         

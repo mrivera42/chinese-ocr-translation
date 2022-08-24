@@ -14,6 +14,10 @@ Custom ConNet
 Epoch [20/25] train acc: 87.17038127334364 train loss: 0.0952029898762703 val acc: 74.2592299262224 val loss: inf
 Best model acc: 74.2592299262224 epoch: 20
 
+Transformer 
+Epoch[100/100] train_loss: 0.009634294547140598 val_loss: 0.03459519321291611
+best model - epoch: 100 val loss: 0.03459519321291611
+
 
 
 

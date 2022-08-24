@@ -103,7 +103,8 @@ print(transcription)
 
 memory = transformer.encoder(transcription)
 
-
+# for i in range(params['d_seq'] - 1):
+    
 
 
 
