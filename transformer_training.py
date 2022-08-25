@@ -8,12 +8,13 @@ import matplotlib.pyplot as plt
 import transformer
 import matplotlib.pyplot as plt
 import json 
+from bleu_score import get_bleu_score
 
 # INIT PARAMETERS 
 UNK = 0 # unknown word id 
 PAD = 1 # padding word id 
 BATCH_SIZE = 64 
-EPOCHS=100
+EPOCHS=40
 LAYERS=3
 H_NUM=8
 D_MODEL=128
@@ -118,45 +119,6 @@ def splitBatch(en, cn, batch_size, shuffle=True):
         batches.append((batch_cn, batch_en))
     
     return batches 
-
-
-def get_bleu_score(reference, hypothesis):
-    '''
-    Args:
-    - reference: target sentences (batch_size x seq_len)
-    - hypothesis: predicted sentences (batch_size x seq_len)
-    Return: 
-    - bleu_score: corpos bleu score between reference and hypothesis (scalar)
-    '''
-
-    # remove special tokens 
-    new_reference = []
-    for sentence in reference:
-        new_sentence=[]
-        for word in sentence:
-            if word == 'EOS':
-                break
-            if word != 'BOS' and word != 'EOS' and word != 'PAD':
-                new_sentence.append(word)
-        new_reference.append(new_sentence)
-
-    new_hypothesis = []
-    for sentence in hypothesis:
-        new_sentence = []
-        for word in sentence:
-            if word == 'EOS':
-                break
-            if word != 'BOS' and word != 'EOS' and word != 'PAD':
-                new_sentence.append(word)
-        new_hypothesis.append(new_sentence)
-    
-    print('reference: ', new_reference)
-    print('hypothesis: ', new_hypothesis)
-    
-    # calculate BLEU score 
-    bleu_score = nltk.translate.bleu_score.corpus_bleu(reference, hypothesis)
-
-    return bleu_score
 
 
 # load and tokenize data
@@ -280,11 +242,12 @@ for epoch in range(1,EPOCHS+1):
 
         # compute bleu score 
         trg_sentences = id_to_word(trg,en_index_dict)
+        # print('trg len: ', len(trg_sentences))
         val, ind = torch.max(out, -1)
         pred_sentences = id_to_word(ind,en_index_dict)
-        bleu_score = get_bleu_score(trg_sentences, pred_sentences)
-        print('bleu score: ', bleu_score)
-        bleu += bleu_score
+        # print('pred len: ', len(pred_sentences))
+        bleu1, bleu2, bleu3, bleu4, bleu_smooth = get_bleu_score(trg_sentences, pred_sentences)
+        bleu += bleu4
 
         
     val_loss /= num_batches

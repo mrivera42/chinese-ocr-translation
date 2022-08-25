@@ -102,8 +102,16 @@ transcription = [[cn_word_dict[word] for word in sentence] for sentence in trans
 print(transcription)
 
 memory = transformer.encoder(transcription)
+start = torch.Tensor([['BOS']])
+# start = np.array([np.concatenate([x,['PAD']* (params['d_seq']-len(x))]) if len(x) < params['d_seq'] else x for x in start])
+mask = torch.tril(torch.ones((params['d_seq'], params['d_seq'])))
+for i in range(params['d_seq'] - 1):
+    out = transformer(memory, start, mask)
 
-# for i in range(params['d_seq'] - 1):
+
+
+
+
     
 
 
