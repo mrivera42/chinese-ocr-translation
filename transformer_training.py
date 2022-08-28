@@ -14,7 +14,7 @@ from bleu_score import get_bleu_score
 UNK = 0 # unknown word id 
 PAD = 1 # padding word id 
 BATCH_SIZE = 64 
-EPOCHS=40
+EPOCHS=100
 LAYERS=3
 H_NUM=8
 D_MODEL=128
@@ -75,6 +75,11 @@ def wordToID(en, cn, en_dict, cn_dict):
 
     return out_en_ids, out_cn_ids
 
+def word_to_id(batch, word_dict): 
+
+    out_ids = [[word_dict[word] for word in sent] for sent in batch]
+    return out_ids
+
 def id_to_word(batch, index_dict):
     '''
     Converts a batch of english and chinese id data to words 
@@ -120,172 +125,176 @@ def splitBatch(en, cn, batch_size, shuffle=True):
     
     return batches 
 
+if __name__ == "__main__": 
 
-# load and tokenize data
-train_en, train_cn = load_data(TRAIN_FILE)
-dev_en, dev_cn = load_data(DEV_FILE)
-
-
-# build dictionaries 
-en_word_dict, en_total_words, en_index_dict = build_dictionary(train_en)
-cn_word_dict, cn_total_words, cn_index_dict = build_dictionary(train_cn)
-
-# save english word dict 
-with open("cn_word_dict.json", "w") as fp:
-    json.dump(cn_word_dict , fp,ensure_ascii=False) 
-
-with open("en_index_dict.json", "w") as fp:
-    json.dump(en_index_dict , fp) 
-
-# use dictionaries to convert each word to an index id 
-train_en, train_cn = wordToID(train_en, train_cn, en_word_dict, cn_word_dict)
-dev_en, dev_cn     = wordToID(dev_en, dev_cn, en_word_dict, cn_word_dict)
-
-# split into batches 
-train_data = splitBatch(en=train_en, cn=train_cn, batch_size=BATCH_SIZE)
-dev_data = splitBatch(en=dev_en, cn=dev_cn, batch_size=BATCH_SIZE)
-
-# vocab lengths 
-src_vocab = len(cn_word_dict)
-tgt_vocab = len(en_word_dict)
-
-# init model 
-# print('d_src_vocab: ',src_vocab)
-# print('d_trg_vocab: ',tgt_vocab)
-# print('d_seq: ', MAX_LENGTH)
-# print('d_embedding: ',D_MODEL)
-# print('h: ',H_NUM)
-# print('expansion_factor: ',4)
-# print('num_layers: ',LAYERS)
-model_params = {
-    'd_src_vocab':src_vocab,
-    'd_trg_vocab':tgt_vocab,
-    'd_seq':MAX_LENGTH,
-    'd_embedding':D_MODEL,
-    'h':H_NUM,
-    'expansion_factor':4,
-    'num_layers':LAYERS
-}
-with open("transformer_params.json", "w") as fp:
-    json.dump(model_params , fp)
- 
-model = transformer.Transformer(
-    d_src_vocab=src_vocab,
-    d_trg_vocab=tgt_vocab,
-    d_seq=MAX_LENGTH,
-    d_embedding=D_MODEL,
-    h=H_NUM,
-    expansion_factor=4,
-    num_layers=LAYERS
-)
-model.to(DEVICE)
-
-# init mask 
+    # load and tokenize data
+    train_en, train_cn = load_data(TRAIN_FILE)
+    dev_en, dev_cn = load_data(DEV_FILE)
 
 
-# optimization loop 
-best_loss = 1e5
-best_epoch = 0
-best_bleu = 0
-optimizer=torch.optim.Adam(params=model.parameters(),lr=5e-5)
-loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0) 
-train_losses = []
-val_losses = []
-bleu_scores = []
-for epoch in range(1,EPOCHS+1):
+    # build dictionaries 
+    en_word_dict, en_total_words, en_index_dict = build_dictionary(train_en)
+    cn_word_dict, cn_total_words, cn_index_dict = build_dictionary(train_cn)
 
-    # train loop 
-    for i, (src,trg) in enumerate(train_data):
+    # save english word dict 
+    with open("cn_word_dict.json", "w") as fp:
+        json.dump(cn_word_dict , fp,ensure_ascii=False) 
 
-        # place tensors to device 
-        src = torch.Tensor(src).to(DEVICE).long()
-        trg = torch.Tensor(trg).to(DEVICE).long()
-        mask = torch.tril(torch.ones((MAX_LENGTH, MAX_LENGTH))).to(DEVICE)
-
-        # forward pass 
-        out = model(src,trg, mask)
-
-        # print prediction vs target sentence 
-        trg_sentence = id_to_word(trg,en_index_dict)
-
-        val, ind = torch.max(out, -1)
-        pred_sentence = id_to_word(ind,en_index_dict)
-        
-
-        # compute loss 
-        train_loss = loss_fn(out.view(-1, tgt_vocab), trg.view(-1))
-        
-        # backprop 
-        optimizer.zero_grad()
-        train_loss.backward()
-
-        # update weights 
-        optimizer.step()
-
+    with open("en_index_dict.json", "w") as fp:
+        json.dump(en_index_dict , fp) 
     
-    val_loss = 0
-    num_batches = len(dev_data)
-    bleu = 0
+    with open("en_word_dict.json","w") as fp: 
+        json.dump(en_word_dict, fp)
 
-    for i, (src, trg) in enumerate(dev_data):
+    # use dictionaries to convert each word to an index id 
+    train_en, train_cn = wordToID(train_en, train_cn, en_word_dict, cn_word_dict)
+    dev_en, dev_cn     = wordToID(dev_en, dev_cn, en_word_dict, cn_word_dict)
 
-        # place tensors on device 
-        src = torch.Tensor(src).to(DEVICE).long()
-        trg = torch.Tensor(trg).to(DEVICE).long()
+    # split into batches 
+    train_data = splitBatch(en=train_en, cn=train_cn, batch_size=BATCH_SIZE)
+    dev_data = splitBatch(en=dev_en, cn=dev_cn, batch_size=BATCH_SIZE)
 
-        # forward pass 
-        out = model(src, trg, mask)
-        
-        # compute loss 
-        loss_val = loss_fn(out.view(-1,tgt_vocab),trg.view(-1))
-        val_loss += loss_val.item()
+    # vocab lengths 
+    src_vocab = len(cn_word_dict)
+    tgt_vocab = len(en_word_dict)
 
-        # compute bleu score 
-        trg_sentences = id_to_word(trg,en_index_dict)
-        # print('trg len: ', len(trg_sentences))
-        val, ind = torch.max(out, -1)
-        pred_sentences = id_to_word(ind,en_index_dict)
-        # print('pred len: ', len(pred_sentences))
-        bleu1, bleu2, bleu3, bleu4, bleu_smooth = get_bleu_score(trg_sentences, pred_sentences)
-        bleu += bleu4
-
-        
-    val_loss /= num_batches
-    bleu /= num_batches
-    val_losses.append(val_loss)
-    train_losses.append(train_loss.item())
-    bleu_scores.append(bleu)
+    # init model 
+    # print('d_src_vocab: ',src_vocab)
+    # print('d_trg_vocab: ',tgt_vocab)
+    # print('d_seq: ', MAX_LENGTH)
+    # print('d_embedding: ',D_MODEL)
+    # print('h: ',H_NUM)
+    # print('expansion_factor: ',4)
+    # print('num_layers: ',LAYERS)
+    model_params = {
+        'd_src_vocab':src_vocab,
+        'd_trg_vocab':tgt_vocab,
+        'd_seq':MAX_LENGTH,
+        'd_embedding':D_MODEL,
+        'h':H_NUM,
+        'expansion_factor':4,
+        'num_layers':LAYERS
+    }
+    with open("transformer_params.json", "w") as fp:
+        json.dump(model_params , fp)
     
-    
+    model = transformer.Transformer(
+        d_src_vocab=src_vocab,
+        d_trg_vocab=tgt_vocab,
+        d_seq=MAX_LENGTH,
+        d_embedding=D_MODEL,
+        h=H_NUM,
+        expansion_factor=4,
+        num_layers=LAYERS
+    )
+    model.to(DEVICE)
 
-    if bleu > best_bleu:
-        best_bleu = bleu
-        best_loss = val_loss
-        best_epoch = epoch 
-        torch.save(model.state_dict(), 'models/transformer.pt')
+    # init mask 
 
-    print(f'Epoch[{epoch}/{EPOCHS}] train_loss: {train_loss.item()} val_loss: {val_loss} bleu: {bleu}')
-print(f'best model - epoch: {best_epoch} val loss: {best_loss} bleu: {best_bleu}')
 
-def word_to_id(batch, word_dict):
+    # optimization loop 
+    best_loss = 1e5
+    best_epoch = 0
+    best_bleu = 0
+    optimizer=torch.optim.Adam(params=model.parameters(),lr=5e-5)
+    loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0) 
+    train_losses = []
+    val_losses = []
+    bleu_scores = []
+    for epoch in range(1,EPOCHS+1):
 
-    out_ids = [[word_dict[word] for word in sent] for sent in batch]
-    return out_ids
+        # train loop 
+        for i, (src,trg) in enumerate(train_data):
 
-plt.plot(train_losses, label='train')
-plt.plot(val_losses,label='val')
-plt.title('Transformer Loss')
-plt.xlabel('Epoch')
-plt.ylabel('CE Loss')
-plt.legend()
-plt.savefig('results/transformer_loss.png')
-plt.close()
+            # place tensors to device 
+            src = torch.Tensor(src).to(DEVICE).long()
+            trg = torch.Tensor(trg).to(DEVICE).long()
+            mask = torch.tril(torch.ones((MAX_LENGTH, MAX_LENGTH))).to(DEVICE)
 
-plt.plot(bleu_scores)
-plt.title('Transformer Bleu Score')
-plt.xlabel('Epoch')
-plt.ylabel('Bleu Score')
-plt.savefig('results/transformer_bleu.png')
+            # forward pass 
+            out = model(src,trg, mask)
+
+            # print prediction vs target sentence 
+            trg_sentence = id_to_word(trg,en_index_dict)
+
+            val, ind = torch.max(out, -1)
+            pred_sentence = id_to_word(ind,en_index_dict)
+            
+
+            # compute loss 
+            train_loss = loss_fn(out.view(-1, tgt_vocab), trg.view(-1))
+            
+            # backprop 
+            optimizer.zero_grad()
+            train_loss.backward()
+
+            # update weights 
+            optimizer.step()
+
+        
+        val_loss = 0
+        num_batches = len(dev_data)
+        bleu = 0
+
+        for i, (src, trg) in enumerate(dev_data):
+
+            # place tensors on device 
+            src = torch.Tensor(src).to(DEVICE).long()
+            trg = torch.Tensor(trg).to(DEVICE).long()
+
+            # forward pass 
+            out = model(src, trg, mask)
+            
+            # compute loss 
+            loss_val = loss_fn(out.view(-1,tgt_vocab),trg.view(-1))
+            val_loss += loss_val.item()
+
+            # compute bleu score 
+            trg_sentences = id_to_word(trg,en_index_dict)
+            # print('trg len: ', len(trg_sentences))
+            val, ind = torch.max(out, -1)
+            pred_sentences = id_to_word(ind,en_index_dict)
+            # print('pred len: ', len(pred_sentences))
+            bleu1, bleu2, bleu3, bleu4, bleu_smooth = get_bleu_score(trg_sentences, pred_sentences)
+            bleu += bleu4
+
+            
+        val_loss /= num_batches
+        bleu /= num_batches
+        val_losses.append(val_loss)
+        train_losses.append(train_loss.item())
+        bleu_scores.append(bleu)
+        
+        
+
+        if val_loss < best_loss:
+            best_bleu = bleu
+            best_loss = val_loss
+            best_epoch = epoch 
+            torch.save(model.state_dict(), 'models/transformer.pt')
+
+        print(f'Epoch[{epoch}/{EPOCHS}] train_loss: {train_loss.item()} val_loss: {val_loss} bleu: {bleu}')
+    print(f'best model - epoch: {best_epoch} val loss: {best_loss} bleu: {best_bleu}')
+
+    def word_to_id(batch, word_dict):
+
+        out_ids = [[word_dict[word] for word in sent] for sent in batch]
+        return out_ids
+
+    plt.plot(train_losses, label='train')
+    plt.plot(val_losses,label='val')
+    plt.title('Transformer Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('CE Loss')
+    plt.legend()
+    plt.savefig('results/transformer_loss.png')
+    plt.close()
+
+    plt.plot(bleu_scores)
+    plt.title('Transformer Bleu Score')
+    plt.xlabel('Epoch')
+    plt.ylabel('Bleu Score')
+    plt.savefig('results/transformer_bleu.png')
 
 
         

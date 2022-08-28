@@ -8,6 +8,8 @@ import torchvision
 import transformer 
 import json
 
+from transformer_training import id_to_word, word_to_id
+
 # set device 
 if not torch.backends.mps.is_available():
     if not torch.backends.mps.is_built():
@@ -73,40 +75,46 @@ for character in  characters:
     pred = classes[index]
     transcription.append(pred)
     
-# machine translation 
-with open('transformer_params.json') as fh: 
-    params = json.load(fh)
-transformer = transformer.Transformer(
-    d_src_vocab=params['d_src_vocab'],
-    d_trg_vocab=params['d_trg_vocab'],
-    d_seq=params['d_seq'],
-    d_embedding=params['d_embedding'],
-    h=params['h'],
-    expansion_factor=params['expansion_factor'],
-    num_layers=params['num_layers']
+# # machine translation 
+# with open('transformer_params.json') as fh: 
+#     params = json.load(fh)
+# transformer = transformer.Transformer(
+#     d_src_vocab=params['d_src_vocab'],
+#     d_trg_vocab=params['d_trg_vocab'],
+#     d_seq=params['d_seq'],
+#     d_embedding=params['d_embedding'],
+#     h=params['h'],
+#     expansion_factor=params['expansion_factor'],
+#     num_layers=params['num_layers']
     
-)
-transformer.load_state_dict(torch.load('models/transformer.pt'))
-transformer.to(torch.device("cpu"))
-transformer.eval()
+# )
+# transformer.load_state_dict(torch.load('models/transformer_best.pt'))
+# transformer.to(torch.device("cpu"))
+# transformer.eval()
 
-transcription.insert(0,'BOS')
-transcription.append('EOS')
-transcription = [transcription]
-transcription = np.array([np.concatenate([x,['PAD']*(params['d_seq']-len(x))]) if len(x) < params['d_seq'] else x for x in transcription])
-with open('en_index_dict.json') as fh: 
-    en_index_dict = json.load(fh)
-with open('cn_word_dict.json') as fh: 
-    cn_word_dict = json.load(fh)
-transcription = [[cn_word_dict[word] for word in sentence] for sentence in transcription]
-print(transcription)
+# transcription.insert(0,'BOS')
+# transcription.append('EOS')
+# transcription = [transcription]
+# transcription = np.array([np.concatenate([x,['PAD']*(params['d_seq']-len(x))]) if len(x) < params['d_seq'] else x for x in transcription])
+# with open('en_index_dict.json') as fh: 
+#     en_index_dict = json.load(fh)
+# with open('cn_word_dict.json') as fh: 
+#     cn_word_dict = json.load(fh)
+# transcription = [[cn_word_dict[word] for word in sentence] for sentence in transcription]
+# print('transcription: ',transcription)
 
-memory = transformer.encoder(transcription)
-start = torch.Tensor([['BOS']])
-# start = np.array([np.concatenate([x,['PAD']* (params['d_seq']-len(x))]) if len(x) < params['d_seq'] else x for x in start])
-mask = torch.tril(torch.ones((params['d_seq'], params['d_seq'])))
-for i in range(params['d_seq'] - 1):
-    out = transformer(memory, start, mask)
+# transcription_encoder = torch.Tensor(transcription).to(torch.device('cpu')).long()
+# print(transcription_encoder.type)
+# memory = transformer.encoder(transcription_encoder)
+# start_list = [['BOS']]
+# start_ind = word_to_id(start_list, cn_word_dict)
+# start = torch.Tensor(np.array([np.concatenate([x,[0]* (params['d_seq']-len(x))]) if len(x) < params['d_seq'] else x for x in start_ind])).to(torch.device('cpu')).long()
+# mask = torch.tril(torch.ones((params['d_seq'], params['d_seq']))).to(torch.device('cpu')).long()
+# # for i in range(params['d_seq'] - 1):
+# out = transformer.decoder(memory, start, mask.long())
+# val, ind = torch.max(out,dim=1)
+# out_sentence = id_to_word(ind, en_index_dict)
+# print('out: ', out_sentence)
 
 
 
