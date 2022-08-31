@@ -20,7 +20,7 @@ Input Image: \
 Output of YOLOv5: \
 ![1](example/character_0.png) ![2](example/character_1.png) \
 Output of CNN: \
-```['你', '好']```
+```['你', '好']```\
 Output of Transformer: \
 ```Hi```
 
