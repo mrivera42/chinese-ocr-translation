@@ -81,6 +81,7 @@ class SublayerConnection(torch.nn.Module):
 	def forward(self, x, sublayer): 
 
 		return x + self.dropout(sublayer(self.norm(x)))
+		# return x + sublayer(self.norm(x))
 
 class EncoderLayer(torch.nn.Module):
 	"consists of 2 sublayers: multi-head attn and feed forward"
@@ -167,7 +168,7 @@ class MultiHeadAttention(torch.nn.Module):
 
 		query, key, value = [lin(x).view(nbatches,-1,self.h,self.d_k).transpose(1,2) for lin, x in zip(self.linears, (query, key, value))]
 
-		x, self.attn = attention(query, key, value, mask=mask, dropout=self.dropout)
+		x, self.attn = attention(query, key, value, mask=mask, dropout=None)
 
 		x = (x.transpose(1,2).contiguous().view(nbatches,-1,self.h*self.d_k))
 
@@ -186,6 +187,7 @@ class PositionwiseFeedForward(torch.nn.Module):
 
 	def forward(self, x): 
 		return self.w_2(self.dropout(self.w_1(x).relu()))
+		# return self.w_2(self.w_1(x).relu())
 
 
 class Embeddings(torch.nn.Module):
@@ -214,6 +216,7 @@ class PositionalEncoding(torch.nn.Module):
 	def forward(self,x):
 		x = x + self.pe[:,: x.size(1)].requires_grad_(False)
 		return self.dropout(x)
+		# return x
 
 def make_model(src_vocab, tgt_vocab, N=3, d_model=512, d_ff=256, h=8, dropout=0.1):
 	c = copy.deepcopy

@@ -1,7 +1,7 @@
 from tkinter.tix import MAX
 import torch
 import json 
-import transformer
+import transformer_nlp
 import numpy as np 
 import transformer_training
 from bleu_score import get_bleu_score
@@ -45,52 +45,48 @@ tgt_vocab = len(en_word_dict)
 
 
 # initialize model 
-model = transformer.Transformer(
-        d_src_vocab=src_vocab,
-        d_trg_vocab=tgt_vocab,
-        d_seq=MAX_LENGTH,
-        d_embedding=D_MODEL,
-        h=H_NUM,
-        expansion_factor=4,
-        num_layers=LAYERS
-    )
-model.load_state_dict(torch.load('models/transformer.pt'))
+# initialize model 
+model = transformer_nlp.make_model(src_vocab, tgt_vocab)
+model.load_state_dict(torch.load('models/transformer_best.pt'))
 model.to(torch.device("cpu"))
 model.eval()
 
-val_loss = 0
-num_batches = len(dev_data)
-bleu = 0
-loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0) 
+# val_loss = 0
+# num_batches = len(dev_data)
+# bleu = 0
+# loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0) 
 
-for i, (src, trg) in enumerate(dev_data):
+# for i, (src, tgt) in enumerate(dev_data):
 
-    # place tensors on device 
-    src = torch.Tensor([src[0]]).to(DEVICE).long()
-    trg = torch.Tensor([trg[0]]).to(DEVICE).long()
-    mask = torch.tril(torch.ones((MAX_LENGTH, MAX_LENGTH))).to(DEVICE)
+#     # place tensors to device 
+#     src = torch.Tensor(src).to(DEVICE).long()
+#     tgt = torch.Tensor(tgt).to(DEVICE).long()
+#     src_mask = (src != PAD).unsqueeze(-2)
+#     tgt_mask_ = (tgt != PAD).unsqueeze(-2)
+#     tgt_mask = tgt_mask_ & transformer_nlp.subsequent_mask(tgt.size(-1)).type_as(tgt_mask_.data)
 
-    # forward pass 
-    out = model(src, trg, mask)
+
+#     # forward pass 
+#     out = model.forward(src, tgt, src_mask, tgt_mask)
     
-    # compute loss 
-    loss_val = loss_fn(out.view(-1,tgt_vocab),trg.view(-1))
-    val_loss += loss_val.item()
+#     # compute loss 
+#     loss_val = loss_fn(out.view(-1,tgt_vocab),tgt.view(-1))
+#     val_loss += loss_val.item()
 
-    # compute bleu score 
-    trg_sentences = transformer_training.id_to_word(trg,en_index_dict)
-    print('trg: ', trg_sentences)
-    val, ind = torch.max(out, -1)
-    pred_sentences = transformer_training.id_to_word(ind,en_index_dict)
-    print('pred: ', pred_sentences)
-    bleu1, bleu2, bleu3, bleu4, bleu_smooth = get_bleu_score(trg_sentences, pred_sentences)
-    bleu += bleu4
+#     # compute bleu score 
+#     tgt_sentences = transformer_training.id_to_word(tgt,en_index_dict)
+#     print('tgt: ', tgt_sentences)
+#     val, ind = torch.max(out, -1)
+#     pred_sentences = transformer_training.id_to_word(ind,en_index_dict)
+#     print('pred: ', pred_sentences)
+#     bleu1, bleu2, bleu3, bleu4, bleu_smooth = get_bleu_score(tgt_sentences, pred_sentences)
+#     bleu += bleu4
 
     
-val_loss /= num_batches
-bleu /= num_batches
+# val_loss /= num_batches
+# bleu /= num_batches
 
-print(f'val_loss: {val_loss} bleu_score: {bleu}')
+# print(f'val_loss: {val_loss} bleu_score: {bleu}')
 
 # load parameters 
 with open('transformer_params.json') as fh: 
@@ -103,7 +99,7 @@ with open('en_word_dict.json') as fh:
     en_word_dict = json.load(fh)
 
 # PREPARE SRC  
-transcription = [['他','昨','天','來','我','的','辦','公','室','。']]
+transcription = [['你','有','多','少','錢','？']]
 # add special tokens and padding 
 transcription[0].insert(0,'BOS')
 transcription[0].append('EOS')
@@ -112,48 +108,76 @@ print('src sentence: ', transcription)
 # convert words to ids 
 transcription_ids = transformer_training.word_to_id(transcription, cn_word_dict)
 # convert to tensor 
-transcription_tensor = torch.Tensor(transcription_ids).to(DEVICE).long()
+src = torch.Tensor(transcription_ids).to(DEVICE).long()
 
-# NON-AUTOREGRESSIVE INPUT
-print('----- NON-AUTOREGRESSIVE INPUT -----')
-trg = [['he', 'came', 'to', 'my', 'office', 'yesterday','.']]
-trg[0].insert(0,'BOS')
-trg[0].append('EOS')
-trg = np.array([np.concatenate([x,['PAD']*(MAX_LENGTH-len(x))]) if len(x) < MAX_LENGTH else x for x in trg])
-print('trg sentence: ', trg)
-trg_ids = transformer_training.word_to_id(trg, en_word_dict) # convert target sentence to ids 
-trg_tensor = torch.Tensor(trg_ids).to(torch.device('cpu')).long() # convert target ids to tensor 
-mask = torch.tril(torch.ones((MAX_LENGTH, MAX_LENGTH))).to(DEVICE).long() # create mask 
-out = model(transcription_tensor, trg_tensor, mask)
-val, ind = torch.max(out,dim=-1)
-def id_to_word(inds, en_index_dict):
-    words = [[en_index_dict[str(ind.item())] for ind in sent] for sent in inds]
-    return words
-out_sentence = id_to_word(ind, en_index_dict)
-print('out_sentence: ', out_sentence)
+# # NON-AUTOREGRESSIVE INPUT
+# print('----- NON-AUTOREGRESSIVE INPUT -----')
+# tgt = [['he', 'came', 'to', 'my', 'office', 'yesterday','.']]
+# tgt[0].insert(0,'BOS')
+# tgt[0].append('EOS')
+# tgt = np.array([np.concatenate([x,['PAD']*(MAX_LENGTH-len(x))]) if len(x) < MAX_LENGTH else x for x in tgt])
+# print('tgt sentence: ', tgt)
+# tgt_ids = transformer_training.word_to_id(tgt, en_word_dict) # convert target sentence to ids 
+# tgt = torch.Tensor(tgt_ids).to(torch.device('cpu')).long() # convert target ids to tensor 
+src_mask = (src != 0).unsqueeze(-2)
+# tgt_mask_ = (tgt != 0).unsqueeze(-2)
+# tgt_mask = tgt_mask_ & transformer_nlp.subsequent_mask(tgt.size(-1)).type_as(tgt_mask_.data)
+# out = model(src,tgt,src_mask,tgt_mask)
+# val, ind = torch.max(out,dim=-1)
+# def id_to_word(inds, en_index_dict):
+#     words = [[en_index_dict[str(ind.item())] for ind in sent] for sent in inds]
+#     return words
+# out_sentence = id_to_word(ind, en_index_dict)
+# print('out_sentence: ', out_sentence)
 
 # AUTOREGRESSIVE INPUT 
 print('--- AUTOREGRESSIVE INPUT-----')
-mask = torch.tril(torch.ones((MAX_LENGTH, MAX_LENGTH))).to(DEVICE).long()
-trg = [['BOS']]
-trg = np.array([np.concatenate([x,['BOS']*(MAX_LENGTH-len(x))]) if len(x) < MAX_LENGTH else x for x in trg])
-print('trg at time=0: ',trg)
-trg_ids = transformer_training.word_to_id(trg, en_word_dict)
-trg_tensor = torch.Tensor(trg_ids).to(DEVICE).long()
-src = model.encoder(transcription_tensor)
-for i in range(1,MAX_LENGTH):
+print('src: ', transformer_training.id_to_word(src, cn_index_dict))
+def greedy_decode(model, src, src_mask, max_len, start_symbol):
+    memory = model.encode(src, src_mask)
+    ys = torch.zeros(1, 1).fill_(start_symbol).type_as(src.data)
+    for i in range(max_len - 1):
+        out = model.decode(memory, src_mask, ys, transformer_nlp.subsequent_mask(ys.size(1)).type_as(src.data))
+        print('out size: ', out.size())
+        print('out[:,-1] size: ', out[:,-1].size())
+        prob = model.generator(out[:, -1])
+        print('prob: ', prob.size())
+        _, next_word = torch.max(prob, dim=1)
+        next_word = next_word.data[0]
+        ys = torch.cat([ys, torch.zeros(1, 1).type_as(src.data).fill_(next_word)], dim=1)
+    return ys
 
-    out = model.decoder(src, trg_tensor, mask)
-    val, ind = torch.max(out, dim=-1)
-    trg_tensor[0][i] = ind[0][i]
-    # print(f'trg_tensor at time {i}: ', trg_tensor)
+translation = greedy_decode(model, src, src_mask, max_len=60, start_symbol=2)
+print('translation: ', translation)
 
-out_sentence = id_to_word(trg_tensor, en_index_dict)
-print('out_sentence: ', out_sentence)
 
-# val, ind = torch.max(out, dim=-1)
-# out_sentence = id_to_word(ind, en_index_dict)
-# print('out_sentencee: ', out_sentence)
+
+
+
+
+
+
+
+# mask = torch.tril(torch.ones((MAX_LENGTH, MAX_LENGTH))).to(DEVICE).long()
+# tgt = [['BOS']]
+# tgt = np.array([np.concatenate([x,['BOS']*(MAX_LENGTH-len(x))]) if len(x) < MAX_LENGTH else x for x in tgt])
+# print('tgt at time=0: ',tgt)
+# tgt_ids = transformer_training.word_to_id(tgt, en_word_dict)
+# tgt_tensor = torch.Tensor(tgt_ids).to(DEVICE).long()
+# src = model.encoder(transcription_tensor)
+# for i in range(1,MAX_LENGTH):
+
+#     out = model.decoder(src, tgt_tensor, mask)
+#     val, ind = torch.max(out, dim=-1)
+#     tgt_tensor[0][i] = ind[0][i]
+#     # print(f'tgt_tensor at time {i}: ', tgt_tensor)
+
+# out_sentence = id_to_word(tgt_tensor, en_index_dict)
+# print('out_sentence: ', out_sentence)
+
+# # val, ind = torch.max(out, dim=-1)
+# # out_sentence = id_to_word(ind, en_index_dict)
+# # print('out_sentencee: ', out_sentence)
 
 
 

@@ -16,7 +16,7 @@ import time
 UNK = 0 # unknown word id 
 PAD = 1 # padding word id 
 BATCH_SIZE = 64 
-EPOCHS=100
+EPOCHS=20
 LAYERS=3
 H_NUM=8
 D_MODEL=128
@@ -170,7 +170,7 @@ if __name__ == "__main__":
     best_loss = 1e5
     best_epoch = 0
     best_bleu = 0
-    optimizer=torch.optim.Adam(params=model.parameters(),lr=5e-5)
+    optimizer=torch.optim.Adam(params=model.parameters(),lr=5e-4)
     loss_fn = torch.nn.CrossEntropyLoss(ignore_index=0)
     train_losses = []
     val_losses = []
@@ -182,26 +182,37 @@ if __name__ == "__main__":
 
             # place tensors to device 
             src = torch.Tensor(src).to(DEVICE).long()
-            tgt = torch.Tensor(tgt).to(DEVICE).long()
+            trg = torch.Tensor(tgt).to(DEVICE).long()
+
+            tgt = trg
+            tgt_y = trg
+
+            # tgt = trg[:,:-1] # decoder input (shifted left)
+            # tgt_y = trg[:,1:] # decoder target (shifted right)
+
+            # print statements 
+            # print('src: ', id_to_word(src, cn_index_dict))
+            # print('tgt: ', id_to_word(tgt, en_index_dict))
+            # print('tgt_y: ', id_to_word(tgt_y, en_index_dict))
+            # print('src shape: ', src.size())
+            # print('tgt shape: ', tgt.size())
+            # print('tgt_y shape: ', tgt_y.size())
+
             src_mask = (src != PAD).unsqueeze(-2)
             tgt_mask_ = (tgt != PAD).unsqueeze(-2)
             tgt_mask = tgt_mask_ & transformer_nlp.subsequent_mask(tgt.size(-1)).type_as(tgt_mask_.data)
 
-
             # forward pass 
             out = model.forward(src, tgt, src_mask, tgt_mask)
-            # print('out shape: ', out.size())
-            # print('tgt shape: ', tgt.size())
 
             # print prediction vs target sentence 
-            trg_sentence = id_to_word(tgt,en_index_dict)
-
             val, ind = torch.max(out, -1)
             pred_sentence = id_to_word(ind,en_index_dict)
+            # print('out: ', id_to_word(ind, en_index_dict))
             
 
             # compute loss 
-            train_loss = loss_fn(out.view(-1, tgt_vocab), tgt.view(-1))
+            train_loss = loss_fn(out.contiguous().view(-1, tgt_vocab), tgt_y.contiguous().view(-1))
             
             # backprop 
             optimizer.zero_grad()
@@ -209,7 +220,6 @@ if __name__ == "__main__":
 
             # update weights 
             optimizer.step()
-
         
         val_loss = 0
         num_batches = len(dev_data)
@@ -219,7 +229,14 @@ if __name__ == "__main__":
 
             # place tensors on device 
             src = torch.Tensor(src).to(DEVICE).long()
-            tgt = torch.Tensor(tgt).to(DEVICE).long()
+            trg = torch.Tensor(tgt).to(DEVICE).long()
+
+            tgt = trg
+            tgt_y = trg
+
+            # tgt = trg[:,:-1] # decoder input (shifted left)
+            # tgt_y = trg[:,1:] # decoder target (shifted right)
+
             src_mask = (src != PAD).unsqueeze(-2)
             tgt_mask_ = (tgt != PAD).unsqueeze(-2)
             tgt_mask = tgt_mask_ & transformer_nlp.subsequent_mask(tgt.size(-1)).type_as(tgt_mask_.data)
@@ -228,7 +245,7 @@ if __name__ == "__main__":
             out = model.forward(src, tgt, src_mask, tgt_mask)
             
             # compute loss 
-            loss_val = loss_fn(out.view(-1,tgt_vocab),tgt.view(-1))
+            loss_val = loss_fn(out.contiguous().view(-1,tgt_vocab),tgt_y.contiguous().view(-1))
             val_loss += loss_val.item()
 
             # compute bleu score 
