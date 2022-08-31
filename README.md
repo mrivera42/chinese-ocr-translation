@@ -14,6 +14,17 @@ best model: 90% accuracy on dev set after 20 epochs \
 best model - epoch: 40 val loss: 0.4836350381374359 bleu: 0.7384979341626325 \
 ![transformer loss](results/transformer_loss.png)
 
+## Example 
+Input Image: \
+![input](example/nihao.jpeg) \
+Output of YOLOv5: \
+![1](example/character_0.png) ![2](example/character_1.png) \
+Output of CNN: \
+```['你', '好']```
+Output of Transformer: \
+```Hi```
+
+
 
 
 

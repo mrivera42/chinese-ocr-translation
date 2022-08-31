@@ -24,7 +24,7 @@ else:
 
 
 
-im = cv2.imread('nihao.jpeg')
+im = cv2.imread('example/nihao.jpeg')
 im = cv2.resize(im, (416,416))
 
 # YOLOv5 inference 
@@ -46,6 +46,9 @@ for row_index in range(len(coordinates.index)):
     characters.append(character_crop)
 
 character_stack = [cv2.resize(cv2.cvtColor(i,cv2.COLOR_BGR2GRAY),(64,64)) for i in characters]
+for i,img in enumerate(character_stack):
+    path = f'example/character_{i}.png'
+    cv2.imwrite(path=path, im=img)
 stack = np.hstack(character_stack)
 cv2.imshow("im",stack)
 cv2.waitKey(0)
@@ -74,6 +77,7 @@ for character in  characters:
     index = np.argmax(logits.detach().numpy())
     pred = classes[index]
     transcription.append(pred)
+print(transcription)
     
 # # machine translation 
 # with open('transformer_params.json') as fh: 
